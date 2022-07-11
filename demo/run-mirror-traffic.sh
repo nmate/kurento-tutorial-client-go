@@ -55,20 +55,45 @@ cleanup
 
 MIRROR_GO_CMD="go run ../webrtc-client-magic-mirror.go --turn="turn:${TURN_SERVER_ADDR}:${TURN_SERVER_PORT}" --url="wss://${APPLICATION_SERVER_ADDR}:${APPLICATION_SERVER_PORT}/magicmirror" --debug -file=../video-samples/mate-sample.ivf"
 
-CALL_ID=0
-while [ $CALL_ID -lt $NUM_OF_CALLS ];
-do
-    echo "[$(ts)] Setting up call with id: $CALL_ID"
-    $MIRROR_GO_CMD &> call_$CALL_ID.log &
-    pids[${CALL_ID}]=$! #store the parent pid
+if [[ $MODE == "static" ]]; then
+    echo " Invoked with static mode."
+    CALL_ID=0
+    while [ $CALL_ID -lt $NUM_OF_CALLS ];
+    do
+        echo "[$(ts)] Setting up call with id: $CALL_ID"
+        $MIRROR_GO_CMD &> call_$CALL_ID.log &
+        pids[${CALL_ID}]=$! #store the parent pid
 
-    ((CALL_ID=CALL_ID+1))
-    sleep 1
-done
+        ((CALL_ID=CALL_ID+1))
+        sleep 0.1
+    done
 
-# wait for all pids
-for pid in ${pids[*]}; do
-    wait $pid
-done
+    # wait for all pids
+    for pid in ${pids[*]}; do
+        wait $pid
+    done
+    echo "[$(ts)] All calls are done. Exit."
 
-echo "[$(ts)] All calls are done. Exit."
+elif [[ $MODE == "rolling" ]]; then
+    echo "[$(ts)] Invoked with rolling mode."
+    CURRENT_CALLS=0
+
+    while true;
+    do
+        if [ $CURRENT_CALLS -lt $NUM_OF_CALLS ]; then
+           $MIRROR_GO_CMD &> call_$CURRENT_CALLS.log &
+           pids[${CURRENT_CALLS}]=$!
+           ((CURRENT_CALLS=CURRENT_CALLS+1))
+
+           echo "[$(ts)] Num of calls in the system: $CURRENT_CALLS, pid: $!"
+           sleep 0.1
+        else
+            wait -n
+            # echo "[$(ts)] A subprocess has been terminated."
+           ((CURRENT_CALLS=CURRENT_CALLS-1))
+        fi
+    done
+
+else
+    echo "Unknown mode given. Try static or rolling."
+fi
